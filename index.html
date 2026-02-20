@@ -374,14 +374,18 @@ function showResultBox(entries) {
 async function fetchToday() {
   if (!cfg.url) return;
   try {
-    const res = await fetch(`${cfg.url}?action=query_today_raw`);
-    const data = await res.json();
+    const res = await fetch(`${cfg.url}?action=query_today_raw`, {
+      method: 'GET',
+      redirect: 'follow'
+    });
+    const text = await res.text();
+    const data = JSON.parse(text);
     if (data && data.entries) {
       todayEntries = data.entries;
       updateDashboard();
       renderLog();
     }
-  } catch(e) { console.log('Fetch today failed, using local data'); }
+  } catch(e) { console.log('Fetch today failed:', e); }
 }
 
 // ── DASHBOARD ──────────────────────────────────────────
