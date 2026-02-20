@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Kaloritracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg: #0f0f1a; --card: #1a1a2e; --card2: #16213e;
+    --accent: #e94560; --green: #0f9b58; --blue: #4cc9f0;
+    --yellow: #f8961e; --text: #eaeaea; --muted: #888;
+    --border: #2a2a3e;
+  }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',sans-serif; min-height:100vh; }
+  
+  /* NAV */
+  nav { display:flex; background:var(--card); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:100; }
+  nav button { flex:1; padding:14px 4px; background:none; border:none; color:var(--muted); font-size:11px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px; transition:.2s; }
+  nav button.active { color:var(--accent); border-bottom:2px solid var(--accent); }
+  nav button svg { width:20px; height:20px; }
+
+  /* PAGES */
+  .page { display:none; padding:16px; max-width:480px; margin:0 auto; }
+  .page.active { display:block; }
+
+  /* CARDS */
+  .card { background:var(--card); border-radius:16px; padding:16px; margin-bottom:16px; border:1px solid var(--border); }
+  h2 { font-size:16px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; }
+
+  /* MACRO RINGS */
+  .rings { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+  .ring-card { background:var(--card); border-radius:16px; padding:16px; border:1px solid var(--border); display:flex; flex-direction:column; align-items:center; }
+  .ring-card.full-width { grid-column:1/-1; }
+  .ring-label { font-size:11px; color:var(--muted); margin-top:8px; text-transform:uppercase; letter-spacing:1px; }
+  .ring-value { font-size:18px; font-weight:700; margin-top:2px; }
+  canvas.donut { width:90px!important; height:90px!important; }
+
+  /* PUSH TO TALK */
+  .ptb-wrap { display:flex; flex-direction:column; align-items:center; padding:24px 0; }
+  #ptb {
+    width:110px; height:110px; border-radius:50%; border:none;
+    background:linear-gradient(135deg,var(--accent),#c62a47);
+    color:#fff; font-size:13px; font-weight:600; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+    box-shadow:0 0 0 0 rgba(233,69,96,.4); transition:.2s;
+  }
+  #ptb.listening { animation:pulse 1.2s infinite; background:linear-gradient(135deg,#e94560,#ff6b6b); }
+  #ptb svg { width:32px; height:32px; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(233,69,96,.4)} 70%{box-shadow:0 0 0 20px rgba(233,69,96,0)} 100%{box-shadow:0 0 0 0 rgba(233,69,96,0)} }
+  #transcript { margin-top:16px; min-height:40px; text-align:center; color:var(--muted); font-style:italic; font-size:14px; }
+  #result-box { background:var(--card2); border-radius:12px; padding:14px; margin-top:12px; width:100%; display:none; border:1px solid var(--border); }
+  #result-box .entry { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+  #result-box .entry:last-child { border:none; }
+  .entry-name { font-size:14px; }
+  .entry-kcal { color:var(--accent); font-weight:700; }
+  #status { text-align:center; font-size:13px; color:var(--green); margin-top:8px; min-height:20px; }
+
+  /* LOG LIST */
+  .log-item { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); }
+  .log-item:last-child { border:none; }
+  .log-left { display:flex; flex-direction:column; }
+  .log-name { font-size:14px; font-weight:600; }
+  .log-detail { font-size:12px; color:var(--muted); margin-top:2px; }
+  .log-kcal { font-size:16px; font-weight:700; color:var(--accent); }
+  .log-time { font-size:11px; color:var(--muted); text-align:right; }
+  .empty { text-align:center; color:var(--muted); padding:32px; font-size:14px; }
+
+  /* WEEK CHART */
+  #weekChart { max-height:200px; }
+
+  /* SETTINGS */
+  .setting-row { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--border); }
+  .setting-row:last-child { border:none; }
+  .setting-label { font-size:14px; }
+  .setting-sub { font-size:12px; color:var(--muted); }
+  input[type=number] { background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 12px; width:90px; font-size:16px; text-align:center; }
+  .save-btn { width:100%; padding:14px; background:var(--accent); border:none; border-radius:12px; color:#fff; font-size:16px; font-weight:700; cursor:pointer; margin-top:8px; }
+  .save-btn:active { opacity:.8; }
+
+  /* CONFIG BANNER */
+  #config-banner { background:#2a1a1e; border:1px solid var(--accent); border-radius:12px; padding:14px; margin-bottom:16px; font-size:13px; color:#ffb3b3; display:none; }
+  #config-banner a { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<nav>
+  <button class="active" onclick="showPage('home',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    Idag
+  </button>
+  <button onclick="showPage('log',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+    Logg
+  </button>
+  <button onclick="showPage('week',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Vecka
+  </button>
+  <button onclick="showPage('settings',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    Mål
+  </button>
+</nav>
+
+<!-- HOME -->
+<div id="page-home" class="page active">
+  <div id="config-banner">
+    ⚠️ Du behöver fylla i din Apps Script URL och Gemini API-nyckel under <strong>Mål</strong> för att appen ska fungera.
+  </div>
+
+  <div class="rings">
+    <div class="ring-card full-width">
+      <canvas id="calChart" class="donut"></canvas>
+      <div class="ring-label">Kalorier</div>
+      <div class="ring-value" id="cal-val">0 / <span id="cal-goal">2000</span> kcal</div>
+    </div>
+    <div class="ring-card">
+      <canvas id="protChart" class="donut"></canvas>
+      <div class="ring-label">Protein</div>
+      <div class="ring-value" id="prot-val" style="color:#4cc9f0">0g</div>
+    </div>
+    <div class="ring-card">
+      <canvas id="karbChart" class="donut"></canvas>
+      <div class="ring-label">Kolhydrater</div>
+      <div class="ring-value" id="karb-val" style="color:#f8961e">0g</div>
+    </div>
+    <div class="ring-card full-width">
+      <canvas id="fatChart" class="donut"></canvas>
+      <div class="ring-label">Fett</div>
+      <div class="ring-value" id="fat-val" style="color:#a8dadc">0g</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ptb-wrap">
+      <button id="ptb" onclick="toggleListen()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+        Håll & tala
+      </button>
+      <div id="transcript">Tryck och berätta vad du ätit...</div>
+      <div id="result-box"></div>
+      <div id="status"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOG -->
+<div id="page-log" class="page">
+  <div class="card">
+    <h2>Dagens logg</h2>
+    <div id="log-list"><div class="empty">Inget loggat idag ännu</div></div>
+  </div>
+</div>
+
+<!-- WEEK -->
+<div id="page-week" class="page">
+  <div class="card">
+    <h2>Veckoöversikt – Kalorier</h2>
+    <canvas id="weekChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Snitt denna vecka</h2>
+    <div id="week-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px"></div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="page-settings" class="page">
+  <div class="card">
+    <h2>API-konfiguration</h2>
+    <div class="setting-row">
+      <div><div class="setting-label">Apps Script URL</div><div class="setting-sub">Din webb-app URL</div></div>
+    </div>
+    <input type="text" id="s-url" placeholder="https://script.google.com/..." style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px">
+    <div class="setting-row">
+      <div><div class="setting-label">Gemini API-nyckel</div><div class="setting-sub">Från aistudio.google.com</div></div>
+    </div>
+    <input type="text" id="s-gemini" placeholder="AIza..." style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px">
+  </div>
+  <div class="card">
+    <h2>Dagliga mål</h2>
+    <div class="setting-row">
+      <div><div class="setting-label">Kalorier</div><div class="setting-sub">kcal per dag</div></div>
+      <input type="number" id="s-kcal" value="2000">
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">Protein</div><div class="setting-sub">gram per dag</div></div>
+      <input type="number" id="s-prot" value="150">
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">Kolhydrater</div><div class="setting-sub">gram per dag</div></div>
+      <input type="number" id="s-karb" value="200">
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">Fett</div><div class="setting-sub">gram per dag</div></div>
+      <input type="number" id="s-fat" value="65">
+    </div>
+    <button class="save-btn" onclick="saveSettings()">Spara inställningar</button>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────
+let cfg = {
+  url: '', gemini: '',
+  kcal:2000, prot:150, karb:200, fat:65
+};
+let todayEntries = [];
+let recognition = null;
+let listening = false;
+let charts = {};
+let weekChart = null;
+
+// ── INIT ───────────────────────────────────────────────
+function init() {
+  const saved = localStorage.getItem('kaloricfg');
+  if (saved) cfg = {...cfg, ...JSON.parse(saved)};
+  loadSettingsUI();
+  if (!cfg.url || !cfg.gemini) {
+    document.getElementById('config-banner').style.display = 'block';
+  }
+  fetchToday();
+  buildDonutCharts();
+}
+
+// ── NAVIGATION ─────────────────────────────────────────
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'week') buildWeekChart();
+  if (id === 'log') renderLog();
+}
+
+// ── SETTINGS ───────────────────────────────────────────
+function loadSettingsUI() {
+  document.getElementById('s-url').value = cfg.url;
+  document.getElementById('s-gemini').value = cfg.gemini;
+  document.getElementById('s-kcal').value = cfg.kcal;
+  document.getElementById('s-prot').value = cfg.prot;
+  document.getElementById('s-karb').value = cfg.karb;
+  document.getElementById('s-fat').value = cfg.fat;
+}
+function saveSettings() {
+  cfg.url = document.getElementById('s-url').value.trim();
+  cfg.gemini = document.getElementById('s-gemini').value.trim();
+  cfg.kcal = +document.getElementById('s-kcal').value;
+  cfg.prot = +document.getElementById('s-prot').value;
+  cfg.karb = +document.getElementById('s-karb').value;
+  cfg.fat = +document.getElementById('s-fat').value;
+  localStorage.setItem('kaloricfg', JSON.stringify(cfg));
+  document.getElementById('config-banner').style.display = cfg.url && cfg.gemini ? 'none' : 'block';
+  updateDashboard();
+  alert('Sparat!');
+}
+
+// ── VOICE ──────────────────────────────────────────────
+function toggleListen() {
+  if (listening) { stopListen(); return; }
+  startListen();
+}
+function startListen() {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    setStatus('Din webbläsare stöder inte röstinmatning. Använd Chrome.', 'red'); return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.lang = 'sv-SE';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.onstart = () => {
+    listening = true;
+    document.getElementById('ptb').classList.add('listening');
+    document.getElementById('ptb').querySelector('svg').style.stroke = '#fff';
+    document.getElementById('transcript').textContent = 'Lyssnar...';
+    document.getElementById('result-box').style.display = 'none';
+    setStatus('');
+  };
+  recognition.onresult = e => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    document.getElementById('transcript').textContent = final || interim || 'Lyssnar...';
+    if (final) processText(final);
+  };
+  recognition.onerror = e => { setStatus('Fel: '+e.error, 'red'); stopListen(); };
+  recognition.onend = () => stopListen();
+  recognition.start();
+}
+function stopListen() {
+  listening = false;
+  if (recognition) recognition.stop();
+  document.getElementById('ptb').classList.remove('listening');
+}
+
+// ── PROCESS TEXT → GEMINI → SHEETS ────────────────────
+async function processText(text) {
+  if (!cfg.gemini) { setStatus('Fyll i Gemini API-nyckel under Mål', 'red'); return; }
+  setStatus('Analyserar livsmedel...', '');
+  try {
+    const entries = await callGemini(text);
+    if (!entries || !entries.length) { setStatus('Kunde inte tolka det du sa', 'red'); return; }
+    showResultBox(entries);
+    if (cfg.url) {
+      setStatus('Loggar i Google Sheets...');
+      for (const e of entries) {
+        await fetch(`${cfg.url}?action=add_entry&livsmedel=${enc(e.livsmedel)}&antal=${e.antal}&enhet=${enc(e.enhet)}&kalorier=${e.kalorier}&protein=${e.protein}&kolhydrater=${e.kolhydrater}&fett=${e.fett}`);
+      }
+    }
+    todayEntries.push(...entries);
+    updateDashboard();
+    renderLog();
+    setStatus('✓ Loggat!', 'green');
+  } catch(err) {
+    setStatus('Fel: '+err.message, 'red');
+  }
+}
+
+async function callGemini(text) {
+  const prompt = `Du är en nutritionsexpert. Tolka följande matbeskrivning och returnera BARA ett JSON-array.
+
+Matbeskrivning: "${text}"
+
+Returnera ett JSON-array där varje livsmedel är ett objekt:
+- livsmedel: namn (sträng)
+- antal: numeriskt värde (nummer)
+- enhet: "portion","gram","ml","matsked","dl","st" (sträng)
+- kalorier: approximerat heltal kcal (nummer)
+- protein: gram, en decimal (nummer)
+- kolhydrater: gram, en decimal (nummer)
+- fett: gram, en decimal (nummer)
+
+Returnera BARA JSON-arrayen, ingen markdown, inga förklaringar.`;
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${cfg.gemini}`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({contents:[{parts:[{text:prompt}]}]})
+  });
+  const data = await res.json();
+  const raw = data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
+  return JSON.parse(raw);
+}
+
+function showResultBox(entries) {
+  const box = document.getElementById('result-box');
+  box.style.display = 'block';
+  box.innerHTML = entries.map(e => `
+    <div class="entry">
+      <div>
+        <div class="entry-name">${e.antal} ${e.enhet} ${e.livsmedel}</div>
+        <div style="font-size:11px;color:var(--muted)">P:${e.protein}g K:${e.kolhydrater}g F:${e.fett}g</div>
+      </div>
+      <div class="entry-kcal">${e.kalorier} kcal</div>
+    </div>`).join('');
+}
+
+// ── FETCH TODAY FROM SHEETS ────────────────────────────
+async function fetchToday() {
+  if (!cfg.url) return;
+  try {
+    const res = await fetch(`${cfg.url}?action=query_today_raw`);
+    const data = await res.json();
+    if (data && data.entries) {
+      todayEntries = data.entries;
+      updateDashboard();
+      renderLog();
+    }
+  } catch(e) { console.log('Fetch today failed, using local data'); }
+}
+
+// ── DASHBOARD ──────────────────────────────────────────
+function getTotals() {
+  return todayEntries.reduce((a,e) => ({
+    kcal: a.kcal + (+e.kalorier||0),
+    prot: a.prot + (+e.protein||0),
+    karb: a.karb + (+e.kolhydrater||0),
+    fat:  a.fat  + (+e.fett||0)
+  }), {kcal:0,prot:0,karb:0,fat:0});
+}
+
+function updateDashboard() {
+  const t = getTotals();
+  document.getElementById('cal-goal').textContent = cfg.kcal;
+  document.getElementById('cal-val').innerHTML = `${Math.round(t.kcal)} / <span id="cal-goal">${cfg.kcal}</span> kcal`;
+  document.getElementById('prot-val').textContent = t.prot.toFixed(1)+'g / '+cfg.prot+'g';
+  document.getElementById('karb-val').textContent = t.karb.toFixed(1)+'g / '+cfg.karb+'g';
+  document.getElementById('fat-val').textContent  = t.fat.toFixed(1)+'g / '+cfg.fat+'g';
+  updateDonut('calChart', t.kcal, cfg.kcal, '#e94560');
+  updateDonut('protChart', t.prot, cfg.prot, '#4cc9f0');
+  updateDonut('karbChart', t.karb, cfg.karb, '#f8961e');
+  updateDonut('fatChart', t.fat, cfg.fat, '#a8dadc');
+}
+
+// ── DONUT CHARTS ───────────────────────────────────────
+function buildDonutCharts() {
+  [['calChart','#e94560'],['protChart','#4cc9f0'],['karbChart','#f8961e'],['fatChart','#a8dadc']].forEach(([id,color]) => {
+    const ctx = document.getElementById(id).getContext('2d');
+    charts[id] = new Chart(ctx, {
+      type:'doughnut',
+      data:{ datasets:[{ data:[0,100], backgroundColor:[color,'#2a2a3e'], borderWidth:0, circumference:360 }] },
+      options:{ cutout:'75%', plugins:{legend:{display:false},tooltip:{enabled:false}}, animation:{duration:600} }
+    });
+  });
+}
+function updateDonut(id, val, max, color) {
+  const pct = Math.min(val/max*100, 100);
+  charts[id].data.datasets[0].data = [pct, 100-pct];
+  charts[id].data.datasets[0].backgroundColor = [color, pct>=100?'#e9456044':'#2a2a3e'];
+  charts[id].update();
+}
+
+// ── LOG ────────────────────────────────────────────────
+function renderLog() {
+  const el = document.getElementById('log-list');
+  if (!todayEntries.length) { el.innerHTML = '<div class="empty">Inget loggat idag ännu</div>'; return; }
+  el.innerHTML = [...todayEntries].reverse().map(e => `
+    <div class="log-item">
+      <div class="log-left">
+        <div class="log-name">${e.antal} ${e.enhet} ${e.livsmedel}</div>
+        <div class="log-detail">P:${(+e.protein).toFixed(1)}g · K:${(+e.kolhydrater).toFixed(1)}g · F:${(+e.fett).toFixed(1)}g</div>
+        <div class="log-time">${e.tid||''}</div>
+      </div>
+      <div class="log-kcal">${e.kalorier} kcal</div>
+    </div>`).join('');
+}
+
+// ── WEEK CHART ─────────────────────────────────────────
+async function buildWeekChart() {
+  const days = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
+  const data = Array(7).fill(0);
+  // Placeholder – replace with real Sheets data via query_week action
+  const ctx = document.getElementById('weekChart').getContext('2d');
+  if (weekChart) weekChart.destroy();
+  weekChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: days,
+      datasets:[{
+        label:'Kalorier',
+        data: data,
+        backgroundColor:'rgba(233,69,96,0.7)',
+        borderRadius:8,
+        borderSkipped:false
+      },{
+        label:'Mål',
+        data: Array(7).fill(cfg.kcal),
+        type:'line',
+        borderColor:'#4cc9f0',
+        borderDash:[5,5],
+        borderWidth:2,
+        pointRadius:0,
+        fill:false
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{ legend:{labels:{color:'#888',font:{size:11}}} },
+      scales:{
+        x:{ ticks:{color:'#888'}, grid:{color:'#2a2a3e'} },
+        y:{ ticks:{color:'#888'}, grid:{color:'#2a2a3e'}, beginAtZero:true }
+      }
+    }
+  });
+
+  // Try to fetch real week data
+  if (cfg.url) {
+    try {
+      const res = await fetch(`${cfg.url}?action=query_week`);
+      const d = await res.json();
+      if (d && d.days) {
+        weekChart.data.datasets[0].data = d.days;
+        weekChart.update();
+        renderWeekStats(d);
+      }
+    } catch(e) {}
+  }
+}
+
+function renderWeekStats(d) {
+  const avg = d.days.reduce((a,b)=>a+b,0)/7;
+  document.getElementById('week-stats').innerHTML = `
+    <div style="background:var(--card2);border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">SNITT/DAG</div>
+      <div style="font-size:22px;font-weight:700;color:var(--accent)">${Math.round(avg)}</div>
+      <div style="font-size:11px;color:var(--muted)">kcal</div>
+    </div>
+    <div style="background:var(--card2);border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">VECKOTOTAL</div>
+      <div style="font-size:22px;font-weight:700;color:var(--blue)">${Math.round(d.days.reduce((a,b)=>a+b,0))}</div>
+      <div style="font-size:11px;color:var(--muted)">kcal</div>
+    </div>`;
+}
+
+// ── HELPERS ────────────────────────────────────────────
+function setStatus(msg, color) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.style.color = color === 'red' ? 'var(--accent)' : color === 'green' ? 'var(--green)' : 'var(--muted)';
+}
+function enc(s) { return encodeURIComponent(s); }
+
+init();
+</script>
+</body>
+</html>
