@@ -377,16 +377,20 @@ async function fetchToday() {
   try {
     const res = await fetch(`${cfg.url}?action=query_today_raw`, {
       method: 'GET',
-      redirect: 'follow'
+      redirect: 'follow',
+      headers: { 'Accept': 'application/json' }
     });
     const text = await res.text();
-    const data = JSON.parse(text);
+    const clean = text.replace(/^\s*Skriv ut indenterad kod\s*☐?\s*/i, '').trim();
+    const data = JSON.parse(clean);
     if (data && data.entries) {
       todayEntries = data.entries;
       updateDashboard();
       renderLog();
     }
-  } catch(e) { console.log('Fetch today failed:', e); }
+  } catch(e) {
+    console.log('Fetch today failed:', e);
+  }
 }
 
 // ── DASHBOARD ──────────────────────────────────────────
