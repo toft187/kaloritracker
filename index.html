@@ -32,12 +32,12 @@
   h2 { font-size:16px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; }
 
   /* MACRO RINGS */
-  .rings { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
-  .ring-card { background:var(--card); border-radius:16px; padding:16px; border:1px solid var(--border); display:flex; flex-direction:column; align-items:center; }
-  .ring-card.full-width { grid-column:1/-1; }
-  .ring-label { font-size:11px; color:var(--muted); margin-top:8px; text-transform:uppercase; letter-spacing:1px; }
-  .ring-value { font-size:18px; font-weight:700; margin-top:2px; }
-  canvas.donut { width:90px!important; height:90px!important; }
+  .rings { display:flex; flex-direction:column; gap:12px; margin-bottom:16px; }
+  .rings-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  .ring-card { background:var(--card); border-radius:16px; padding:12px; border:1px solid var(--border); display:flex; flex-direction:column; align-items:center; }
+  .ring-label { font-size:10px; color:var(--muted); margin-top:6px; text-transform:uppercase; letter-spacing:1px; }
+  .ring-value { font-size:13px; font-weight:700; margin-top:2px; text-align:center; }
+  canvas.donut { width:70px!important; height:70px!important; }
 
   /* PUSH TO TALK */
   .ptb-wrap { display:flex; flex-direction:column; align-items:center; padding:24px 0; }
@@ -114,25 +114,27 @@
   </div>
 
   <div class="rings">
-    <div class="ring-card full-width">
+    <div class="ring-card">
       <canvas id="calChart" class="donut"></canvas>
       <div class="ring-label">Kalorier</div>
       <div class="ring-value" id="cal-val">0 / <span id="cal-goal">2000</span> kcal</div>
     </div>
-    <div class="ring-card">
-      <canvas id="protChart" class="donut"></canvas>
-      <div class="ring-label">Protein</div>
-      <div class="ring-value" id="prot-val" style="color:#4cc9f0">0g</div>
-    </div>
-    <div class="ring-card">
-      <canvas id="karbChart" class="donut"></canvas>
-      <div class="ring-label">Kolhydrater</div>
-      <div class="ring-value" id="karb-val" style="color:#f8961e">0g</div>
-    </div>
-    <div class="ring-card full-width">
-      <canvas id="fatChart" class="donut"></canvas>
-      <div class="ring-label">Fett</div>
-      <div class="ring-value" id="fat-val" style="color:#a8dadc">0g</div>
+    <div class="rings-row">
+      <div class="ring-card">
+        <canvas id="protChart" class="donut"></canvas>
+        <div class="ring-label">Protein</div>
+        <div class="ring-value" id="prot-val" style="color:#4cc9f0">0g</div>
+      </div>
+      <div class="ring-card">
+        <canvas id="karbChart" class="donut"></canvas>
+        <div class="ring-label">Kolhydrater</div>
+        <div class="ring-value" id="karb-val" style="color:#f8961e">0g</div>
+      </div>
+      <div class="ring-card">
+        <canvas id="fatChart" class="donut"></canvas>
+        <div class="ring-label">Fett</div>
+        <div class="ring-value" id="fat-val" style="color:#a8dadc">0g</div>
+      </div>
     </div>
   </div>
 
@@ -146,6 +148,11 @@
       <div id="result-box"></div>
       <div id="status"></div>
     </div>
+  </div>
+  <div class="card" style="text-align:center">
+    <button onclick="clearToday()" style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:10px;padding:10px 24px;font-size:14px;cursor:pointer">
+      🗑 Rensa dagens data
+    </button>
   </div>
 </div>
 
@@ -506,6 +513,22 @@ function setStatus(msg, color) {
   el.textContent = msg;
   el.style.color = color === 'red' ? 'var(--accent)' : color === 'green' ? 'var(--green)' : 'var(--muted)';
 }
+async function clearToday() {
+  if (!confirm('Rensa all data för idag? Detta tar bort lokalt och i Google Sheets.')) return;
+  todayEntries = [];
+  updateDashboard();
+  renderLog();
+  setStatus('Lokala data rensade', 'green');
+  if (cfg.url) {
+    try {
+      await fetch(`${cfg.url}?action=clear_today`);
+      setStatus('✓ Sheets och lokal data rensade', 'green');
+    } catch(e) {
+      setStatus('Lokal data rensad (Sheets misslyckades)', 'red');
+    }
+  }
+}
+
 function enc(s) { return encodeURIComponent(s); }
 
 init();
