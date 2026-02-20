@@ -317,14 +317,24 @@ function stopListen() {
 }
 
 // ── PROCESS: röst → Apps Script → spara ───────────────
+async function fetchWithRetry(url, attempts=3) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      return await res.text();
+    } catch(e) {
+      if (i === attempts - 1) throw e;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1))); // vänta 1s, 2s
+    }
+  }
+}
+
 async function processText(text) {
   setStatus('Analyserar livsmedel...');
   try {
-    const res = await fetch(
-      `${cfg.url}?action=parse_food&text=${encodeURIComponent(text)}`,
-      { redirect: 'follow' }
+    const raw = await fetchWithRetry(
+      `${cfg.url}?action=parse_food&text=${encodeURIComponent(text)}`
     );
-    const raw = await res.text();
     const clean = raw.replace(/```json|```/g,'').trim();
     const entries = JSON.parse(clean);
 
@@ -346,14 +356,16 @@ async function processText(text) {
     setStatus('✓ Loggat!', 'green');
 
     // 3. Synka till Sheets (sekundär — tyst om det misslyckas)
-    if (cfg.url) {
-      for (const e of enriched) {
-        fetch(`${cfg.url}?action=add_entry&livsmedel=${enc(e.livsmedel)}&antal=${e.antal}&enhet=${enc(e.enhet)}&kalorier=${e.kalorier}&protein=${e.protein}&kolhydrater=${e.kolhydrater}&fett=${e.fett}`)
-          .catch(() => {}); // tyst fel — localStorage har redan sparat
-      }
+    for (const e of enriched) {
+      fetch(`${cfg.url}?action=add_entry&livsmedel=${enc(e.livsmedel)}&antal=${e.antal}&enhet=${enc(e.enhet)}&kalorier=${e.kalorier}&protein=${e.protein}&kolhydrater=${e.kolhydrater}&fett=${e.fett}`)
+        .catch(() => {});
     }
   } catch(err) {
-    setStatus('Fel: '+err.message, 'red');
+    if (err.message.includes('fetch')) {
+      setStatus('Nätverksfel – försöker igen om du trycker på knappen', 'red');
+    } else {
+      setStatus('Fel: '+err.message, 'red');
+    }
   }
 }
 
