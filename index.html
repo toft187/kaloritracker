@@ -127,8 +127,16 @@
 <!-- LOG -->
 <div id="page-log" class="page">
   <div class="card">
-    <h2>Dagens logg</h2>
-    <div id="log-list"><div class="empty">Inget loggat idag ännu</div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <button onclick="changeLogDay(-1)" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 12px;font-size:18px;cursor:pointer">‹</button>
+      <div style="text-align:center">
+        <div id="log-date-label" style="font-size:14px;font-weight:600"></div>
+        <div id="log-date-sub" style="font-size:11px;color:var(--muted)"></div>
+      </div>
+      <button onclick="changeLogDay(1)" id="log-next-btn" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 12px;font-size:18px;cursor:pointer">›</button>
+    </div>
+    <div id="log-day-totals" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"></div>
+    <div id="log-list"><div class="empty">Inget loggat denna dag</div></div>
   </div>
 </div>
 
@@ -425,11 +433,69 @@ function updateDonut(id, val, max, color) {
   charts[id].update();
 }
 
+let logDayOffset = 0; // 0 = idag, -1 = igår osv
+
+function changeLogDay(dir) {
+  const newOffset = logDayOffset + dir;
+  if (newOffset > 0) return; // kan inte gå framåt förbi idag
+  logDayOffset = newOffset;
+  renderLog();
+}
+
+function getLogDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + logDayOffset);
+  return d;
+}
+
+function getLogKey() {
+  return getLogDate().toISOString().slice(0,10);
+}
+
+function getEntriesForDay(key) {
+  try {
+    const all = JSON.parse(localStorage.getItem(LS_ENTRIES) || '{}');
+    return all[key] || [];
+  } catch(e) { return []; }
+}
+
 // ── LOG ────────────────────────────────────────────────
 function renderLog() {
+  const date = getLogDate();
+  const key = getLogKey();
+  const entries = logDayOffset === 0 ? todayEntries : getEntriesForDay(key);
+
+  // Datumrubrik
+  const days = ['Söndag','Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag'];
+  const isToday = logDayOffset === 0;
+  const isYesterday = logDayOffset === -1;
+  document.getElementById('log-date-label').textContent =
+    isToday ? 'Idag' : isYesterday ? 'Igår' : days[date.getDay()];
+  document.getElementById('log-date-sub').textContent =
+    date.toLocaleDateString('sv-SE', {day:'numeric', month:'long'});
+
+  // Dölj framåt-pil om vi är på idag
+  document.getElementById('log-next-btn').style.opacity = logDayOffset === 0 ? '0.3' : '1';
+
+  // Dagsummering
+  const totals = entries.reduce((a,e) => ({
+    kcal: a.kcal+(+e.kalorier||0),
+    prot: a.prot+(+e.protein||0),
+    karb: a.karb+(+e.kolhydrater||0),
+    fat:  a.fat+(+e.fett||0)
+  }), {kcal:0,prot:0,karb:0,fat:0});
+
+  document.getElementById('log-day-totals').innerHTML = entries.length ? `
+    <span style="background:var(--card2);border-radius:8px;padding:4px 10px;font-size:12px;color:var(--accent)">${Math.round(totals.kcal)} kcal</span>
+    <span style="background:var(--card2);border-radius:8px;padding:4px 10px;font-size:12px;color:#4cc9f0">P: ${totals.prot.toFixed(1)}g</span>
+    <span style="background:var(--card2);border-radius:8px;padding:4px 10px;font-size:12px;color:#f8961e">K: ${totals.karb.toFixed(1)}g</span>
+    <span style="background:var(--card2);border-radius:8px;padding:4px 10px;font-size:12px;color:#a8dadc">F: ${totals.fat.toFixed(1)}g</span>
+  ` : '';
+
+  // Lista
   const el = document.getElementById('log-list');
-  if (!todayEntries.length) { el.innerHTML = '<div class="empty">Inget loggat idag ännu</div>'; return; }
-  el.innerHTML = [...todayEntries].reverse().map(e => `
+  if (!entries.length) { el.innerHTML = '<div class="empty">Inget loggat denna dag</div>'; return; }
+  el.innerHTML = [...entries].reverse().map(e => `
     <div class="log-item">
       <div>
         <div class="log-name">${e.antal} ${e.enhet} ${e.livsmedel}</div>
